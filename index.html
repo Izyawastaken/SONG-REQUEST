@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Song Request Bot</title>
+    <!-- Fonts: Inter for a clean, San Francisco-like look -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        /* --- RESET & VARIABLES --- */
+        :root {
+            --bg-body: #000000;
+            --bg-card: rgba(28, 28, 30, 0.65);
+            --bg-card-solid: #1c1c1e;
+            --bg-input: rgba(118, 118, 128, 0.24);
+
+            --border-subtle: rgba(255, 255, 255, 0.1);
+            --border-focus: rgba(255, 255, 255, 0.3);
+
+            --text-primary: #ffffff;
+            --text-secondary: #8e8e93;
+            --text-tertiary: #48484a;
+
+            --glass-blur: blur(20px);
+            --radius-l: 20px;
+            --radius-m: 14px;
+            --radius-s: 8px;
+            --radius-pill: 999px;
+
+            --transition: all 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+            --press-scale: scale(0.96);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            outline: none;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            /* Subtle mesh gradient for depth */
+            background-image:
+                radial-gradient(circle at 10% 20%, rgba(255, 255, 255, 0.03) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(255, 255, 255, 0.02) 0%, transparent 40%);
+        }
+
+        /* --- UTILITIES --- */
+        .glass {
+            background: var(--bg-card);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--border-subtle);
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .flex {
+            display: flex;
+        }
+
+        .flex-col {
+            flex-direction: column;
+        }
+
+        .items-center {
+            align-items: center;
+        }
+
+        .justify-between {
+            justify-content: space-between;
+        }
+
+        .gap-2 {
+            gap: 8px;
+        }
+
+        .gap-4 {
+            gap: 16px;
+        }
+
+        /* --- SCROLLBAR --- */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #444;
+        }
+
+        /* --- LAYOUT --- */
+        .app-container {
+            max-width: 1000px;
+            /* Increased for horizontal layout */
+            margin: 0 auto;
+            padding: 20px;
+            padding-bottom: 100px;
+            transition: var(--transition);
+        }
+
+        /* Side-by-Side Grid */
+        /* Side-by-Side Grid */
+        main {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-areas:
+                "player queue"
+                "logs logs";
+            gap: 24px;
+            align-items: start;
+        }
+
+        #audio-player-container {
+            grid-area: player;
+        }
+
+        #youtube-queue-card {
+            grid-area: queue;
+        }
+
+        /* Logs Section targeting the container div */
+        main>.card:last-child {
+            grid-area: logs;
+            width: 100%;
+        }
+
+        /* Stream View / Mini Player Styles */
+        body.stream-mode {
+            background: black;
+            overflow: hidden;
+        }
+
+        body.stream-mode header,
+        body.stream-mode #config-section,
+        body.stream-mode #youtube-queue-card,
+        body.stream-mode .card-header .status-indicator,
+        body.stream-mode #log,
+        body.stream-mode main > .card:last-child {
+            display: none !important;
+        }
+
+        body.stream-mode .app-container {
+            padding: 0;
+            margin: 0;
+            max-width: none;
+            height: 100vh;
+        }
+
+        body.stream-mode main {
+            display: block;
+            height: 100%;
+        }
+
+        /* Rotating Blurred Background */
+        #stream-bg {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: 200%;
+            height: 200%;
+            transform: translate(-50%, -50%);
+            background-size: cover;
+            background-position: center;
+            filter: blur(80px) saturate(1.5) brightness(0.6);
+            animation: rotateBg 25s linear infinite;
+            z-index: 0;
+            opacity: 0;
+            transition: opacity 1s ease-in-out;
+        }
+
+        #stream-bg.visible {
+            opacity: 1;
+        }
+
+        body.stream-mode #stream-bg {
+            display: block;
+        }
+
+        @keyframes rotateBg {
+            0% {
+                transform: translate(-50%, -50%) rotate(0deg) scale(1.5);
+            }
+            100% {
+                transform: translate(-50%, -50%) rotate(360deg) scale(1.5);
+            }
+        }
+
+        body.stream-mode .now-playing-card {
+            height: 100vh;
+            border-radius: 0;
+            border: none;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            /* Glassmorphic effect */
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(40px);
+            -webkit-backdrop-filter: blur(40px);
+            position: relative;
+            z-index: 1;
+        }
+
+        body.stream-mode .album-art {
+            width: 180px;
+            height: 180px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+            border: 2px solid rgba(255, 255, 255, 0.15);
+        }
+
+        body.stream-mode .track-info h2 {
+            font-size: 22px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+        }
+
+        body.stream-mode .track-info p {
+            text-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
+        }
+
+        body.stream-mode .card-header {
+            text-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Floating "Exit Stream View" button */
+        #exit-stream-view {
+            display: none;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            color: white;
+            cursor: pointer;
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+        }
+
+        body.stream-mode #exit-stream-view {
+            display: flex;
+        }
+
+        /* --- HEADER --- */
+        header {
+            position: sticky;
+            top: 20px;
+            z-index: 100;
+            margin-bottom: 30px;
+        }
+
+        .header-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px;
+            border-radius: var(--radius-pill);
+        }
+
+        h1 {
+            font-weight: 500;
+            font-size: 17px;
+            letter-spacing: -0.02em;
+            opacity: 0.9;
+            flex-grow: 1;
+            text-align: center;
+        }
+
+        .icon-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            main {
+                grid-template-columns: 1fr;
+            }
+        }
+
+
+        .icon-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .icon-btn:active {
+            transform: var(--press-scale);
+        }
+
+        /* --- CARDS & SECTIONS --- */
+        section {
+            margin-bottom: 24px;
+        }
+
+        .card {
+            border-radius: var(--radius-l);
+            padding: 24px;
+            margin-bottom: 16px;
+            transition: var(--transition);
+        }
+
+        .card-header {
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* --- TOGGLES (iOS Style) --- */
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .toggle-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .toggle-label {
+            font-size: 16px;
+        }
+
+        /* CSS Switch */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 30px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #39393d;
+            /* Off state */
+            transition: .3s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        input:checked+.slider {
+            background-color: #30d158;
+            /* Green - wait, prompt said dual tone. Adjusting to white/gray */
+        }
+
+        /* Override to Monochrome per strict request */
+        .switch input:checked+.slider {
+            background-color: var(--text-primary);
+            /* White when on */
+        }
+
+        .switch input:checked+.slider:before {
+            transform: translateX(20px);
+            background-color: #000;
+            /* Black knob when on */
+        }
+
+        /* --- FORMS & INPUTS --- */
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            background: var(--bg-input);
+            border: none;
+            border-radius: var(--radius-m);
+            padding: 12px 16px;
+            color: var(--text-primary);
+            font-size: 16px;
+            transition: var(--transition);
+        }
+
+        input:focus {
+            background: rgba(118, 118, 128, 0.36);
+        }
+
+        input::placeholder {
+            color: var(--text-tertiary);
+        }
+
+        /* --- BUTTONS --- */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 20px;
+            border-radius: var(--radius-pill);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            border: none;
+            transition: var(--transition);
+            width: 100%;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background-color: var(--text-primary);
+            color: #000;
+        }
+
+        .btn-primary:hover {
+            background-color: #e5e5e5;
+        }
+
+        .btn-primary:active {
+            transform: var(--press-scale);
+        }
+
+        .btn-secondary {
+            background-color: rgba(118, 118, 128, 0.12);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background-color: rgba(118, 118, 128, 0.2);
+        }
+
+        .btn-secondary:active {
+            transform: var(--press-scale);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        /* --- STATUS INDICATORS --- */
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 10px;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+            border: 1px solid var(--text-secondary);
+        }
+
+        .dot.connected {
+            background-color: var(--text-primary);
+            border-color: var(--text-primary);
+            box-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
+        }
+
+        .dot.disconnected {
+            background-color: transparent;
+        }
+
+        /* --- AUDIO PLAYER --- */
+        .now-playing-card {
+            text-align: center;
+            padding: 30px 20px;
+        }
+
+        .album-art {
+            width: 120px;
+            height: 120px;
+            background: linear-gradient(135deg, #333, #111);
+            border-radius: var(--radius-m);
+            margin: 0 auto 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .track-info h2 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .track-info p {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .audio-controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+            margin-top: 24px;
+        }
+
+        .control-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .control-btn:hover {
+            color: #fff;
+            transform: scale(1.1);
+        }
+
+        .control-btn.main-play {
+            width: 56px;
+            height: 56px;
+            background: var(--text-primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            /* Ensure icon inside is visible and colored correctly */
+            color: #000 !important;
+        }
+
+        .control-btn.main-play svg {
+            /* Lucide generates SVGs, ensure they inherit color */
+            stroke: currentColor;
+            fill: currentColor;
+        }
+
+        .control-btn.main-play:hover {
+            background: #fff;
+            transform: scale(1.05);
+        }
+
+        .control-btn.main-play:active {
+            transform: var(--press-scale);
+        }
+
+        /* --- QUEUE LIST --- */
+        .queue-list {
+            list-style: none;
+        }
+
+        .queue-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            transition: var(--transition);
+        }
+
+        .queue-item:last-child {
+            border-bottom: none;
+        }
+
+        .queue-item:hover {
+            background: rgba(255, 255, 255, 0.03);
+            padding-left: 8px;
+            padding-right: 8px;
+            border-radius: 8px;
+        }
+
+        .q-index {
+            font-size: 14px;
+            color: var(--text-secondary);
+            width: 24px;
+        }
+
+        .q-details {
+            flex-grow: 1;
+        }
+
+        .q-title {
+            font-size: 15px;
+            font-weight: 500;
+            display: block;
+        }
+
+        .q-req {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .q-action {
+            color: var(--text-tertiary);
+        }
+
+        /* --- LOGS --- */
+        #log {
+            font-family: 'SF Mono', 'Menlo', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            color: #8e8e93;
+            height: 150px;
+            overflow-y: auto;
+            background: #000;
+            border-radius: var(--radius-m);
+            padding: 12px;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .log-entry {
+            margin-bottom: 4px;
+        }
+
+        .log-time {
+            color: #555;
+            margin-right: 8px;
+        }
+
+        /* Animation for Config Panel */
+        #config-section {
+            overflow: hidden;
+            transition: max-height 0.4s ease-in-out, opacity 0.4s ease-in-out;
+            max-height: 2000px;
+            /* Arbitrary large number for slide effect */
+            opacity: 1;
+        }
+
+        #config-section.collapsed {
+            max-height: 0;
+            opacity: 0;
+            margin-bottom: 0;
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Rotating Background for Stream View -->
+    <div id="stream-bg"></div>
+
+    <!-- Header -->
+    <header>
+        <div class="glass header-bar">
+            <!-- Left Spacer (Stream View Button) -->
+            <button id="stream-view-btn" class="icon-btn" aria-label="Stream View" title="Mini Player">
+                <i data-lucide="app-window" width="20" height="20"></i>
+            </button>
+
+            <h1>Song Request Bot</h1>
+
+            <!-- Settings Toggle -->
+            <button id="settings-toggle" class="icon-btn" aria-label="Settings">
+                <i data-lucide="settings" width="20" height="20"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Floating Exit Button for Stream View -->
+    <button id="exit-stream-view" title="Expand View">
+        <i data-lucide="maximize-2" width="16" height="16"></i>
+    </button>
+
+    <div class="app-container">
+
+        <!-- Configuration Section -->
+        <section id="config-section" class="collapsed">
+
+            <!-- Settings Menu (Toggles) -->
+            <div class="glass card" id="settings-menu-card">
+                <div class="card-header">Settings</div>
+                <div class="toggle-row">
+                    <span class="toggle-label">Enable Spotify</span>
+                    <label class="switch">
+                        <input type="checkbox" id="enable-spotify">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="toggle-row">
+                    <span class="toggle-label">Enable YouTube</span>
+                    <label class="switch">
+                        <input type="checkbox" id="enable-youtube">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Spotify Auth -->
+            <div class="glass card" id="spotify-config-card">
+                <div class="card-header">
+                    Spotify Connection
+                    <div id="spotify-status" class="status-indicator">
+                        <div class="dot disconnected"></div> <span>Disconnected</span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Client ID</label>
+                    <input type="text" id="spotifyClientId" placeholder="Enter ID">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Client Secret</label>
+                    <input type="password" id="spotifyClientSecret" placeholder="Enter Secret">
+                </div>
+                <button class="btn btn-primary" id="authSpotify">
+                    <i data-lucide="check-circle" width="16"></i> Authenticate
+                </button>
+            </div>
+
+            <!-- Twitch Auth -->
+            <div class="glass card" id="twitch-config-card">
+                <div class="card-header">
+                    Twitch Connection
+                    <div id="twitch-status" class="status-indicator">
+                        <div class="dot disconnected"></div> <span>Disconnected</span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Channel Name</label>
+                    <input type="text" id="twitchChannel" placeholder="e.g. shroud">
+                </div>
+
+                <div class="btn-group">
+                    <button class="btn btn-secondary" id="toggle-auto-twitch">Auto</button>
+                    <button class="btn btn-secondary" id="toggle-manual-twitch">Manual Token</button>
+                </div>
+
+                <div id="twitch-auto-auth">
+                    <button class="btn btn-primary" id="authTwitchBtn">
+                        <i data-lucide="link-2" width="16"></i> Login with Twitch
+                    </button>
+                </div>
+
+                <div id="twitch-manual-auth" class="hidden">
+                    <div class="form-group">
+                        <label class="form-label">OAuth Token</label>
+                        <input type="password" id="twitchBotToken" placeholder="oauth:...">
+                    </div>
+                    <button class="btn btn-primary" id="connectTwitch">
+                        <i data-lucide="link" width="16"></i> Connect via Token
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Dashboard / Main Content -->
+        <main>
+            <!-- Now Playing / Player -->
+            <div class="glass card now-playing-card" id="audio-player-container">
+                <div class="card-header" style="justify-content: center;">Now Playing</div>
+
+                <div class="album-art">
+                    <i data-lucide="music" width="40" height="40" color="#555"></i>
+                </div>
+
+                <div class="track-info">
+                    <h2 id="track-title">Not Playing</h2>
+                    <p id="track-artist">Queue is empty</p>
+                </div>
+
+                <!-- Hidden Native Audio Element -->
+                <audio id="audio-player"></audio>
+
+                <div class="audio-controls">
+                    <button class="control-btn" id="prev-btn"><i data-lucide="skip-back" width="24"></i></button>
+                    <button class="control-btn main-play" id="play-pause-btn"><i data-lucide="play" width="24"
+                            fill="black"></i></button>
+                    <button class="control-btn" id="next-btn"><i data-lucide="skip-forward" width="24"></i></button>
+                </div>
+
+                <div style="margin-top: 20px; padding: 0 10px;">
+                    <input type="range" id="progress-bar" min="0" max="100" value="0"
+                        style="width: 100%; accent-color: white; opacity: 0.7;">
+                </div>
+            </div>
+
+            <!-- Queue -->
+            <div class="glass card" id="youtube-queue-card">
+                <div class="card-header">
+                    <span>Up Next</span>
+                    <span
+                        style="font-size: 11px; background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 10px;">YouTube</span>
+                </div>
+                <ul class="queue-list" id="yt-queue">
+                    <!-- Dynamic Items injected here -->
+                    <li style="text-align: center; color: #8e8e93; padding: 10px;">Queue is empty</li>
+                </ul>
+            </div>
+
+            <!-- Logs -->
+            <div class="card" style="background: transparent; border: none; padding: 0;">
+                <div class="card-header">System Logs</div>
+                <div id="log">
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="renderer.js"></script>
+</body>
+
+</html>

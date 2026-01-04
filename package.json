@@ -1,0 +1,40 @@
+{
+  "name": "song-request",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "build": {
+    "appId": "com.songrequest.bot",
+    "productName": "Song Request Bot",
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "directories": {
+      "output": "dist"
+    }
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "electron-store": "^8.1.0",
+    "express": "^5.2.1",
+    "spotify-web-api-node": "^5.0.2",
+    "tmi.js": "^1.8.5",
+    "yt-dlp-exec": "^1.0.2"
+  },
+  "devDependencies": {
+    "electron": "^39.2.7",
+    "electron-builder": "^26.0.12"
+  }
+}
